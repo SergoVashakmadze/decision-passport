@@ -131,9 +131,12 @@ hardcoded RPC URLs.
 
 ## Status
 
-Merkle core, contract, anchorer and verifier: written, tested, deployed, and exercised against a real
-run of 53,384 decisions. Next: ERC-8004 agent identity, x402-paid verification, and a public page
-where anyone can paste a decision and check it against the chain.
+Merkle core, contract, anchorer, verifier and the verify page: written, tested, deployed, and
+exercised against a real run of 53,384 decisions on Monad testnet.
+
+Next: ERC-8004 agent identity (the registries are Monad **mainnet**-only — Identity
+`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`, Reputation `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`),
+and x402-paid verification.
 
 ## Licence
 
