@@ -1,0 +1,37 @@
+{
+  "name": "decision-passport",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'lint: chain-monad'",
+    "test": "vitest run",
+    "compile": "node scripts/compile.mjs",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0",
+    "solc": "^0.8.26",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  },
+  "license": "MIT",
+  "description": "Merkle-batched provenance for AI agent decisions, anchored on Monad.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SergoVashakmadze/decision-passport"
+  }
+}
