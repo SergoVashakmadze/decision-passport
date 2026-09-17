@@ -59,6 +59,21 @@ proving one decision: NWL on 2019-05-19 (avoid)
 
 [View the transaction →](https://testnet.monadexplorer.com/tx/0xdb6f1f19d37f37428996492332f92eab12aec7982ac9abf8ba4bdaf1d799443f)
 
+## The verify page
+
+`web/` is a single static page — no build step, no framework, no backend. It reads the anchored batch
+straight from the contract, hashes a decision record in your browser, and calls `verifyDecision` on
+Monad. Six real decisions from the anchored run ship with it, each with its inclusion proof, so the
+first click verifies something real.
+
+The button next to it flips the verdict on the record. The hash changes, the chain rejects it, and
+the page says why. That is the whole argument in one interaction.
+
+```sh
+npm run build && node scripts/export-samples.mjs <run-dump.json> web/samples.json
+npx http-server web        # or any static server; it must be served over HTTP, not file://
+```
+
 ## Design
 
 Leaves are **double-hashed** — `keccak256(keccak256(decisionHash))` — so no internal node of the tree
