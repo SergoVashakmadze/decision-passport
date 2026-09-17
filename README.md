@@ -138,6 +138,21 @@ Next: ERC-8004 agent identity (the registries are Monad **mainnet**-only — Ide
 `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`, Reputation `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`),
 and x402-paid verification.
 
+## Attribution
+
+Third-party work this builds on:
+
+- **[viem](https://github.com/wevm/viem)** (MIT) — RPC client, keccak256 and ABI encoding.
+- **[OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts)** (MIT) — no
+  code is vendored, but the Merkle layout deliberately matches their `MerkleProof` conventions
+  (double-hashed leaves, sorted sibling pairs) so proofs are interchangeable with that audited
+  implementation.
+- **[solc](https://github.com/ethereum/solidity)** (GPL-3.0) — used as a build tool to produce the
+  committed artifact; it is not linked into or distributed with this code.
+- Chain parameters for Monad mainnet (143) and testnet (10143) come from viem's chain registry.
+
+Everything else in this repository is original work written for Metropolis during the build window.
+
 ## Licence
 
 MIT
