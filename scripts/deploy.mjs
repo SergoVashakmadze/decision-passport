@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * Deploys DecisionRegistry to Monad.
+ * Deploys a contract from src/artifacts to Monad.
  *
- *   MONAD_DEPLOYER_KEY_FILE=./deployer.key node scripts/deploy.mjs
+ *   MONAD_DEPLOYER_KEY_FILE=./deployer.key node scripts/deploy.mjs [ContractName]
  *   MONAD_NETWORK=mainnet ...                       # default: testnet
+ *
+ * ContractName defaults to DecisionRegistry. AgentIdentityRegistry is the ERC-8004 identity
+ * registry for testnet, where the canonical ones do not exist.
  *
  * The key is read from a file, not an argument or an inline env value, so it never lands in shell
  * history or a process listing. It is never printed. Nothing else in this package needs a key —
@@ -17,7 +20,18 @@ import { monad, monadTestnet } from "viem/chains";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const artifact = require("../src/artifacts/DecisionRegistry.json");
+const contractName = process.argv[2] ?? "DecisionRegistry";
+if (!/^[A-Za-z0-9_]+$/.test(contractName)) {
+  console.error(`not a contract name: ${contractName}`);
+  process.exit(1);
+}
+let artifact;
+try {
+  artifact = require(`../src/artifacts/${contractName}.json`);
+} catch {
+  console.error(`no artifact for ${contractName}. Run \`npm run compile\` first.`);
+  process.exit(1);
+}
 
 const network = process.env.MONAD_NETWORK === "mainnet" ? "mainnet" : "testnet";
 const chain = network === "mainnet" ? monad : monadTestnet;
@@ -40,6 +54,7 @@ const transport = http(process.env.MONAD_RPC_URL || undefined);
 const publicClient = createPublicClient({ chain, transport });
 const walletClient = createWalletClient({ account, chain, transport });
 
+console.log(`contract  ${contractName}`);
 console.log(`network   ${chain.name} (chain id ${chain.id})`);
 console.log(`deployer  ${account.address}`);
 
@@ -50,7 +65,7 @@ if (balance === 0n) {
   process.exit(1);
 }
 
-console.log("\ndeploying DecisionRegistry…");
+console.log(`\ndeploying ${contractName}…`);
 const hash = await walletClient.deployContract({
   abi: artifact.abi,
   bytecode: artifact.bytecode,
@@ -66,9 +81,13 @@ if (receipt.status !== "success" || !receipt.contractAddress) {
 }
 
 const explorer = chain.blockExplorers?.default?.url;
-console.log(`\n✅ DecisionRegistry deployed`);
+console.log(`\n✅ ${contractName} deployed`);
 console.log(`address   ${receipt.contractAddress}`);
 console.log(`block     ${receipt.blockNumber}`);
 console.log(`gas used  ${receipt.gasUsed}`);
 if (explorer) console.log(`explorer  ${explorer}/address/${receipt.contractAddress}`);
-console.log(`\nSet MONAD_REGISTRY_ADDRESS=${receipt.contractAddress}`);
+console.log(
+  contractName === "DecisionRegistry"
+    ? `\nSet MONAD_REGISTRY_ADDRESS=${receipt.contractAddress}`
+    : `\nSet MONAD_IDENTITY_ADDRESS=${receipt.contractAddress}`,
+);
