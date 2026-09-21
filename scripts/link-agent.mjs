@@ -2,8 +2,13 @@
 /**
  * Registers an ERC-8004 agent identity and points it at this decision registry.
  *
- *   node scripts/link-agent.mjs register <agent-card-url>        # mints the identity
+ *   node scripts/link-agent.mjs register <agent-card-url> [--link <chainId> <registryAddress>]
  *   node scripts/link-agent.mjs link <agentId> <chainId> <registryAddress>
+ *
+ * `register --link` does both halves in one transaction, using the ERC-8004 registration overload
+ * that takes metadata entries. It is cheaper than registering and then linking (311k gas against
+ * 356k), and it is atomic: there is no window in which the agent exists but names no registry.
+ * `link` on its own is for an agent that already exists, or for repointing one.
  *
  * Both are writes to Monad **mainnet**, where the ERC-8004 registries live — they spend real MON,
  * and `register` mints an ERC-721 that cannot be unminted. Neither runs without `--confirm`; the
@@ -28,12 +33,16 @@ import {
   formatRegistryRef,
 } from "../dist/identity.js";
 
-const args = process.argv.slice(2).filter((a) => a !== "--confirm");
-const confirmed = process.argv.includes("--confirm");
+const argv = process.argv.slice(2);
+const confirmed = argv.includes("--confirm");
+const linkAt = argv.indexOf("--link");
+// `--link a b` consumes its two operands, so the positional arguments stay positional.
+const linkOperands = linkAt >= 0 ? argv.slice(linkAt + 1, linkAt + 3) : [];
+const args = argv.filter((a, i) => a !== "--confirm" && a !== "--link" && !(linkAt >= 0 && (i === linkAt + 1 || i === linkAt + 2)));
 const [command] = args;
 
 const usage = () => {
-  console.error("usage: node scripts/link-agent.mjs register <agent-card-url> [--confirm]");
+  console.error("usage: node scripts/link-agent.mjs register <agent-card-url> [--link <chainId> <registryAddress>] [--confirm]");
   console.error("       node scripts/link-agent.mjs link <agentId> <chainId> <registryAddress> [--confirm]");
   process.exit(1);
 };
@@ -85,14 +94,67 @@ if (command === "register") {
   const [, agentURI] = args;
   if (!agentURI) usage();
 
-  await send(`register(${agentURI})`, {
+  // Registering mints an ERC-721 that cannot be unminted, so a second identity for the same agent
+  // is a mess that has to be lived with rather than undone. Say what exists before adding to it.
+  const mine = await publicClient.readContract({
     address: ERC8004_IDENTITY_REGISTRY,
-    abi: [{ type: "function", name: "register", stateMutability: "nonpayable", inputs: [{ name: "agentURI", type: "string" }], outputs: [{ type: "uint256" }] }],
-    functionName: "register",
-    args: [agentURI],
+    abi: [{ type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] }],
+    functionName: "balanceOf",
+    args: [account.address],
   });
-  console.log(`\nThe new agent id is the token id in the Transfer log above. Link it with:`);
-  console.log(`  node scripts/link-agent.mjs link <agentId> 10143 $MONAD_REGISTRY_ADDRESS --confirm`);
+  if (mine > 0n) {
+    console.log(`\n${account.address} already owns ${mine} agent identit${mine === 1n ? "y" : "ies"} here.`);
+    console.log("Registering again mints another one, which cannot be unminted. Use `link` instead if you meant the existing agent.");
+    if (!confirmed) process.exit(1);
+  }
+
+  let receipt;
+  if (linkAt >= 0) {
+    const [chainIdArg, registryAddress] = linkOperands;
+    if (!/^\d+$/.test(chainIdArg ?? "") || !/^0x[0-9a-fA-F]{40}$/.test(registryAddress ?? "")) usage();
+    const ref = { chainId: Number(chainIdArg), address: registryAddress.toLowerCase() };
+
+    receipt = await send(`register("${agentURI}", [${DECISION_REGISTRY_KEY}="${formatRegistryRef(ref)}"])`, {
+      address: ERC8004_IDENTITY_REGISTRY,
+      abi: [{
+        type: "function", name: "register", stateMutability: "nonpayable",
+        inputs: [
+          { name: "agentURI", type: "string" },
+          { name: "metadata", type: "tuple[]", components: [{ name: "key", type: "string" }, { name: "value", type: "bytes" }] },
+        ],
+        outputs: [{ type: "uint256" }],
+      }],
+      functionName: "register",
+      args: [agentURI, [{ key: DECISION_REGISTRY_KEY, value: encodeRegistryRef(ref) }]],
+    });
+  } else {
+    receipt = await send(`register("${agentURI}")`, {
+      address: ERC8004_IDENTITY_REGISTRY,
+      abi: [{ type: "function", name: "register", stateMutability: "nonpayable", inputs: [{ name: "agentURI", type: "string" }], outputs: [{ type: "uint256" }] }],
+      functionName: "register",
+      args: [agentURI],
+    });
+  }
+
+  // The agent id is assigned by the contract, so it is read back from the mint rather than guessed:
+  // the ERC-721 Transfer whose sender is the zero address, whose third topic is the token id.
+  const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const mint = receipt.logs.find((l) => l.topics[0] === TRANSFER && /^0x0{64}$/.test(l.topics[1] ?? ""));
+  const agentId = mint ? BigInt(mint.topics[3]) : null;
+
+  if (agentId === null) {
+    console.log("\nRegistered, but no mint log was found in the receipt — check the explorer for the agent id.");
+  } else {
+    console.log(`\nAgent id  ${agentId}`);
+    if (linkAt >= 0) {
+      console.log(`\nRegistered and linked in one transaction. Check the binding with:`);
+      console.log(`  MONAD_REGISTRY_ADDRESS=${linkOperands[1].toLowerCase()} node scripts/agent-passport.mjs ${agentId}`);
+      console.log(`\nThen set "agentId": ${agentId} in web/samples.json to turn on the verify page's identity panel.`);
+    } else {
+      console.log(`\nNow point it at the decision registry:`);
+      console.log(`  node scripts/link-agent.mjs link ${agentId} 10143 $MONAD_REGISTRY_ADDRESS --confirm`);
+    }
+  }
 } else {
   const [, agentIdArg, chainIdArg, registryAddress] = args;
   if (!/^\d+$/.test(agentIdArg ?? "") || !/^\d+$/.test(chainIdArg ?? "") || !/^0x[0-9a-fA-F]{40}$/.test(registryAddress ?? "")) usage();

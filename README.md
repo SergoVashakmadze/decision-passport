@@ -121,12 +121,22 @@ one is a mainnet write that spends real MON, so `scripts/link-agent.mjs` prints 
 stops unless passed `--confirm`.
 
 ```sh
-MONAD_DEPLOYER_KEY_FILE=./agent.key node scripts/link-agent.mjs register https://dipbuyer.ai/agent-card.json
-MONAD_DEPLOYER_KEY_FILE=./agent.key node scripts/link-agent.mjs link <agentId> 10143 0x9444… --confirm
+MONAD_DEPLOYER_KEY_FILE=./agent.key node scripts/link-agent.mjs \
+  register https://dipbuyer.ai/agent-card.json --link 10143 0x9444… --confirm
 ```
 
-It refuses before spending anything if the sending key is not one the agent authorises, rather than
-letting the write revert on chain.
+`register --link` does both halves in one transaction, using the ERC-8004 registration overload
+that takes metadata entries: **311k gas against 356k** for registering and then linking, and atomic,
+so there is no window in which the agent exists but names no registry. The agent id is assigned by
+the contract, so it is read back from the mint log rather than guessed.
+
+The script refuses before spending anything if the sending key is not one the agent authorises, and
+warns before minting a second identity to an address that already owns one — an ERC-721 that cannot
+be unminted is a mistake to be talked out of, not one to report afterwards.
+
+**The key that registers must be the key that anchors.** The binding checks
+`isAuthorizedOrOwner(anchoredBy, agentId)`, so registering from a different address leaves that half
+reading `no` however correct everything else is.
 
 ## The verify page
 
