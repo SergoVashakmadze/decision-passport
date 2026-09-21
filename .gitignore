@@ -1,2 +1,7 @@
 node_modules/
 dist/
+
+# Private keys. The README tells you to create ./agent.key and ./deployer.key right here, and
+# `git add -A` would otherwise commit one — which, for a key that owns an agent identity and real
+# MON, is not something a later commit can undo.
+*.key
