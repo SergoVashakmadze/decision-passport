@@ -132,7 +132,7 @@ contract AgentIdentityRegistry {
     // ============ Metadata ============
 
     function setMetadata(uint256 agentId, string calldata metadataKey, bytes calldata metadataValue) external {
-        _requireAuthorized(agentId);
+        _requireOwner(agentId);
         _setMetadata(agentId, metadataKey, metadataValue);
     }
 
@@ -147,7 +147,7 @@ contract AgentIdentityRegistry {
     }
 
     function setAgentURI(uint256 agentId, string calldata newURI) external {
-        _requireAuthorized(agentId);
+        _requireOwner(agentId);
         _agentURIs[agentId] = newURI;
         emit URIUpdated(agentId, newURI, msg.sender);
     }
@@ -166,7 +166,7 @@ contract AgentIdentityRegistry {
      *      wallets are asked via ERC-1271.
      */
     function setAgentWallet(uint256 agentId, address newWallet, uint256 deadline, bytes calldata signature) external {
-        _requireAuthorized(agentId);
+        _requireOwner(agentId);
         if (newWallet == address(0)) revert ZeroAddress();
         if (block.timestamp > deadline) revert SignatureExpired();
 
@@ -184,7 +184,7 @@ contract AgentIdentityRegistry {
     }
 
     function unsetAgentWallet(uint256 agentId) external {
-        _requireAuthorized(agentId);
+        _requireOwner(agentId);
         _agentWallets[agentId] = address(0);
         emit AgentWalletSet(agentId, address(0), msg.sender);
     }
@@ -214,22 +214,31 @@ contract AgentIdentityRegistry {
     // ============ Authorisation ============
 
     /**
-     * @notice Whether `account` may act for `agentId`: its owner, an approved operator, or a wallet
-     *         the agent has bound with that wallet's own signature.
+     * @notice Whether `account` may act *as* `agentId`: its owner, an approved operator, or a
+     *         wallet the agent has bound with that wallet's own signature.
      * @dev This is the check that makes "agent N anchored this batch" mean more than an assertion.
+     *
+     *      Acting as the agent is deliberately weaker than controlling it. An agent wallet is
+     *      expected to be a hot key that signs a batch anchor every rebalance; administering the
+     *      identity — repointing its decision registry, rebinding its wallet, selling it — takes
+     *      ownership, checked by `_isApprovedOrOwner`. Conflating the two would let the hot key
+     *      transfer the identity away or quietly aim it at a different registry, which is the
+     *      whole thing this contract exists to make hard.
      */
     function isAuthorizedOrOwner(address account, uint256 agentId) public view returns (bool) {
-        address owner = _owners[agentId];
-        if (owner == address(0)) return false;
-        return account == owner
-            || _tokenApprovals[agentId] == account
-            || _operatorApprovals[owner][account]
-            || _agentWallets[agentId] == account;
+        return _isApprovedOrOwner(account, agentId) || _agentWallets[agentId] == account;
     }
 
-    function _requireAuthorized(uint256 agentId) private view {
+    /// @dev Control of the identity itself: owner, approved address, or operator. Never a wallet.
+    function _isApprovedOrOwner(address account, uint256 agentId) private view returns (bool) {
+        address owner = _owners[agentId];
+        if (owner == address(0)) return false;
+        return account == owner || _tokenApprovals[agentId] == account || _operatorApprovals[owner][account];
+    }
+
+    function _requireOwner(uint256 agentId) private view {
         if (_owners[agentId] == address(0)) revert NonexistentAgent(agentId);
-        if (!isAuthorizedOrOwner(msg.sender, agentId)) revert NotAuthorized(msg.sender, agentId);
+        if (!_isApprovedOrOwner(msg.sender, agentId)) revert NotAuthorized(msg.sender, agentId);
     }
 
     // ============ View ============
@@ -277,7 +286,9 @@ contract AgentIdentityRegistry {
     }
 
     function transferFrom(address from, address to, uint256 agentId) public {
-        if (!isAuthorizedOrOwner(msg.sender, agentId)) revert NotAuthorized(msg.sender, agentId);
+        // Ownership, not agent authority: a bound hot wallet may anchor as the agent, and must not
+        // be able to sell it.
+        if (!_isApprovedOrOwner(msg.sender, agentId)) revert NotAuthorized(msg.sender, agentId);
         if (ownerOf(agentId) != from) revert NotOwner();
         if (to == address(0)) revert ZeroAddress();
 

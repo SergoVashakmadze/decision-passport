@@ -130,7 +130,19 @@ check("an expired signature is refused",
 
 await write("setAgentWallet", [agentId, stranger.address, deadline, goodSig]);
 check("a wallet that signed is bound", (await read("getAgentWallet", [agentId])) === stranger.address);
-check("and is then authorised", (await read("isAuthorizedOrOwner", [stranger.address, agentId])) === true);
+check("and is then authorised to act as the agent", (await read("isAuthorizedOrOwner", [stranger.address, agentId])) === true);
+
+// Acting as the agent is deliberately weaker than controlling it. The wallet is a hot key that
+// anchors a batch every rebalance; if it could also repoint the registry or sell the identity, the
+// binding would be worth only as much as the hot key's hygiene.
+check("but cannot repoint the decision registry",
+  await reverts("setMetadata", [agentId, "decisionRegistry", stringToHex("eip155:1:0xdead")], stranger.address));
+check("nor rebind the agent wallet",
+  await reverts("unsetAgentWallet", [agentId], stranger.address));
+check("nor change the agent card",
+  await reverts("setAgentURI", [agentId, "https://attacker.test/card.json"], stranger.address));
+check("nor transfer the identity away",
+  await reverts("transferFrom", [account.address, stranger.address, agentId], stranger.address));
 
 // ---- transfer clears the wallet -------------------------------------------------------------
 console.log("\ntransfer");
