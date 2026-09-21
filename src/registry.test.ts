@@ -72,7 +72,7 @@ describe("MonadAnchorer", () => {
     await expect(anchorer.anchorBatch(hashes(2), CONFIG_HASH)).rejects.toThrow(/reverted/);
   });
 
-  it("anchors a single decision as a one-leaf batch, matching the Algorand Anchorer shape", async () => {
+  it("anchors a single decision as a one-leaf batch, matching the one-decision-per-transaction shape", async () => {
     const [only] = hashes(1) as [Hex];
     const anchorer = new MonadAnchorer({ publicClient: publicClientStub(), walletClient: walletClientStub("0x01"), account, address: ADDRESS });
 
