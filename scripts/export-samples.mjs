@@ -81,6 +81,11 @@ const out = {
   // page hides its identity panel rather than showing an unbound one; MONAD_AGENT_ID sets it, and
   // regenerating samples must not silently drop it.
   agentId: process.env.MONAD_AGENT_ID ? Number(process.env.MONAD_AGENT_ID) : null,
+  // Which ERC-8004 registry holds that identity, CAIP-10. Null means the canonical one on Monad
+  // mainnet; an AgentIdentityRegistry beside the batch is named here so the page reads one chain.
+  identityRegistry: process.env.MONAD_IDENTITY_ADDRESS
+    ? `eip155:${process.env.MONAD_NETWORK === "mainnet" ? 143 : 10143}:${process.env.MONAD_IDENTITY_ADDRESS.toLowerCase()}`
+    : null,
   generatedAt: new Date().toISOString(),
   samples,
 };

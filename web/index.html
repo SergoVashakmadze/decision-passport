@@ -160,7 +160,7 @@
 
   <section class="card" id="agentCard" hidden>
     <h2>Whose decision was it?</h2>
-    <p class="sub">ERC-8004 agent identity, read live from Monad mainnet — a different chain from the batch.</p>
+    <p class="sub" id="agentSub">ERC-8004 agent identity.</p>
     <dl class="kv">
       <dt>Agent</dt><dd><a id="agentLink" target="_blank" rel="noopener"></a></dd>
       <dt>Owner</dt><dd id="agentOwner">…</dd>
@@ -202,10 +202,11 @@ import { createPublicClient, http, hexToString, keccak256, stringToBytes } from 
 const REGISTRY = "0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121";
 const EXPLORER = "https://testnet.monadexplorer.com";
 
-// ERC-8004 is deployed on Monad mainnet only — there is no code at this address on testnet — so
-// the identity panel reads a different chain from the batch panel. That split is the honest shape
-// of the thing, not an inconvenience to paper over.
-const IDENTITY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
+// Which ERC-8004 registry holds the identity comes from samples.json, because it is not always on
+// this chain. The canonical registries are Monad mainnet only — there is no code at the address
+// below on testnet — so an identity there is read across chains, and the panel says so. An
+// AgentIdentityRegistry deployed beside the batch is read on the batch's own chain instead.
+const CANONICAL_IDENTITY = "eip155:143:0x8004a169fb4a3325136eb29fa0ceb6d2e539a432";
 const MAINNET_EXPLORER = "https://monadexplorer.com";
 const DECISION_REGISTRY_KEY = "decisionRegistry";
 
@@ -329,6 +330,12 @@ async function loadBatch(root) {
 /** A CAIP-10 account id, the standard way to name a contract on a specific chain. */
 const caip10 = (chainId, address) => `eip155:${chainId}:${address.toLowerCase()}`;
 
+/** Parses a CAIP-10 account id; anything that is not one is not a registry reference. */
+function parseCaip10(value) {
+  const m = /^eip155:(\d+):(0x[0-9a-fA-F]{40})$/.exec(String(value ?? "").trim());
+  return m ? { chainId: Number(m[1]), address: m[2].toLowerCase() } : null;
+}
+
 const mark = (el, ok, text) => {
   el.textContent = text ?? (ok ? "yes" : "no");
   el.style.color = ok ? "var(--ok)" : "var(--bad)";
@@ -341,13 +348,22 @@ const mark = (el, ok, text) => {
  */
 async function loadAgent(agentId, anchoredBy) {
   if (agentId === null || agentId === undefined) return;   // no agent registered yet
+  const ref = parseCaip10(data.identityRegistry ?? CANONICAL_IDENTITY);
+  if (!ref) return;
+  const onBatchChain = ref.chainId === monadTestnet.id;
+  const explorer = onBatchChain ? EXPLORER : MAINNET_EXPLORER;
+
   const id = BigInt(agentId);
   $("agentCard").hidden = false;
-  $("agentLink").textContent = `#${id} in ${IDENTITY}`;
-  $("agentLink").href = `${MAINNET_EXPLORER}/address/${IDENTITY}`;
+  $("agentLink").textContent = `#${id} in ${ref.address}`;
+  $("agentLink").href = `${explorer}/address/${ref.address}`;
+  $("agentSub").textContent = onBatchChain
+    ? "ERC-8004 agent identity, read live from the same chain as the batch."
+    : "ERC-8004 agent identity, read live from Monad mainnet — a different chain from the batch.";
 
+  const rpc = onBatchChain ? client : identityClient;
   const read = (functionName, args) =>
-    identityClient.readContract({ address: IDENTITY, abi: IDENTITY_ABI, functionName, args });
+    rpc.readContract({ address: ref.address, abi: IDENTITY_ABI, functionName, args });
 
   let owner, agentURI;
   try {
@@ -355,7 +371,7 @@ async function loadAgent(agentId, anchoredBy) {
     [owner, agentURI] = await Promise.all([read("ownerOf", [id]), read("tokenURI", [id])]);
   } catch {
     $("agentOwner").textContent = "not registered";
-    $("bindNote").textContent = `No agent #${id} in the ERC-8004 registry on Monad mainnet.`;
+    $("bindNote").textContent = `No agent #${id} in the registry at ${ref.address}.`;
     return;
   }
   $("agentOwner").textContent = owner;

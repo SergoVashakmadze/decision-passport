@@ -3,6 +3,7 @@
   "configHash": "0x383dc8bffeae768ff95c2651041b60bdfc1fce0d9c77c49b240b4c4d6b869260",
   "decisionCount": 53384,
   "agentId": null,
+  "identityRegistry": null,
   "generatedAt": "2026-09-17T20:29:53.587Z",
   "samples": [
     {

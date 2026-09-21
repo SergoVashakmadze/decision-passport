@@ -5,9 +5,13 @@
  *
  *   MONAD_REGISTRY_ADDRESS=0x… node scripts/agent-passport.mjs <agentId> [samples.json]
  *
- * Read-only, and it reads two chains: the decision registry wherever it is deployed (testnet by
- * default), and the ERC-8004 identity registry on Monad mainnet, which is the only chain it exists
- * on. No wallet, no key — this is the check a sceptic runs, so it asks nothing of the operator.
+ * Read-only. No wallet, no key — this is the check a sceptic runs, so it asks nothing of the
+ * operator.
+ *
+ * By default the identity comes from the canonical ERC-8004 registry on Monad mainnet, which is the
+ * only chain it exists on, so the two records sit on different chains. Set MONAD_IDENTITY_ADDRESS
+ * to read an AgentIdentityRegistry on the same chain as the batch instead, and the binding stops
+ * being a cross-chain statement about one key and becomes a single chain's own record.
  */
 import { readFileSync } from "node:fs";
 import { createPublicClient, http } from "viem";
@@ -34,15 +38,22 @@ const { root, samples } = JSON.parse(readFileSync(samplesPath, "utf8"));
 const sample = samples?.[0];
 
 const decisionClient = createPublicClient({ chain: decisionChain, transport: http(process.env.MONAD_RPC_URL || undefined) });
-// The identity registry is mainnet-only, so it gets its own client even when the batch is on
-// testnet. Pointing one client at both chains is exactly the mistake this separation prevents.
-const identityClient = createPublicClient({ chain: monad, transport: http(process.env.MONAD_MAINNET_RPC_URL || undefined) });
+
+// Same-chain when MONAD_IDENTITY_ADDRESS names a registry, cross-chain otherwise. The canonical
+// registry is mainnet-only, so in that case it gets its own client even when the batch is on
+// testnet: pointing one client at both chains is exactly the mistake this separation prevents.
+const identityAddress = process.env.MONAD_IDENTITY_ADDRESS;
+const sameChain = Boolean(identityAddress);
+const identityChain = sameChain ? decisionChain : monad;
+const identityClient = sameChain
+  ? decisionClient
+  : createPublicClient({ chain: monad, transport: http(process.env.MONAD_MAINNET_RPC_URL || undefined) });
 
 const registry = { chainId: decisionChain.id, address: registryAddress.toLowerCase() };
 
 const passport = await decisionPassport({
   verifier: new MonadVerifier({ publicClient: decisionClient, address: registryAddress }),
-  identity: new AgentIdentity({ publicClient: identityClient }),
+  identity: new AgentIdentity({ publicClient: identityClient, ...(identityAddress ? { address: identityAddress } : {}) }),
   registry,
   root,
   agentId,
@@ -61,7 +72,11 @@ if (!passport.batch) {
   console.log(`         by     ${passport.batch.anchoredBy}`);
 }
 
-console.log(`\nagent    #${agentId} in ${ERC8004_IDENTITY_REGISTRY} on ${monad.name}`);
+console.log(`\nagent    #${agentId} in ${identityAddress ?? ERC8004_IDENTITY_REGISTRY} on ${identityChain.name}`);
+if (!sameChain) {
+  console.log(`         (canonical ERC-8004 registry — a different chain from the batch, so the`);
+  console.log(`          binding below is one key controlling both records, not one chain's word)`);
+}
 if (!passport.agent) {
   console.log(`         not registered`);
 } else {
