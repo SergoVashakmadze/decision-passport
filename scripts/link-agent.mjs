@@ -58,7 +58,11 @@ function cardDataUri(file, { agentId = null, registry = null } = {}) {
   if (Array.isArray(card.registrations)) {
     card.registrations = card.registrations.map((r) => ({
       ...r,
-      agentId: agentId === null ? r.agentId : Number(agentId),
+      // Null when unknown, never the value the file happened to carry. At registration the id
+      // does not exist yet, and the file's copy belongs to some earlier registration — writing it
+      // into a fresh one mints an identity whose own card misstates which agent it is. `set-card`
+      // fills in the real id once the chain has assigned it.
+      agentId: agentId === null ? null : Number(agentId),
       agentRegistry: `eip155:${chain.id}:${registryAddress.toLowerCase()}`,
     }));
   }
