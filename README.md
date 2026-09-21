@@ -172,6 +172,7 @@ available in a system like this — so it is a test, not a comment.
 | `scripts/anchor-run.mjs` | Anchors a run and proves one of its decisions, end to end |
 | `scripts/agent-passport.mjs` | Reads the full chain of custody for one decision |
 | `scripts/link-agent.mjs` | Registers an ERC-8004 identity and points it at this registry |
+| `web/agent-card.json` | The A2A agent card to publish and register against |
 
 ## Use
 
@@ -212,8 +213,10 @@ written and tested, and run against the live mainnet registry — its interface 
 deployed bytecode rather than the specification, because the deployed revision is older than the
 current reference implementation and three spec functions are simply not in it. What has *not*
 happened is registering an agent of ours: that is a mainnet write spending real MON, so it is a
-decision to take deliberately rather than something a build step does. Until it does, the verify
-page covers decision → batch, and the identity half is the CLI.
+decision to take deliberately rather than something a build step does. The verify page's identity
+panel is written and tested against the live registry, and is driven by `agentId` in `samples.json`
+— it stays hidden while that is null, so it appears the moment an agent is registered rather than
+shipping a panel that answers "no" to every question.
 
 Next: x402-paid verification, and the ERC-8004 Reputation registry.
 
