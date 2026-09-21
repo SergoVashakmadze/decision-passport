@@ -346,6 +346,46 @@ const mark = (el, ok, text) => {
  * this registry, and the batch was anchored by a key the agent authorises. Either alone is
  * claimable by anyone, so both are shown and the verdict is their conjunction.
  */
+/**
+ * An agent card is either a URL or inlined as a `data:` URI. Printing a 1.5 kB percent-encoded blob
+ * verbatim buries the panel, so an inline card is parsed and shown as what it says it is, with the
+ * raw URI kept one click away — it is the thing actually stored on chain, so it stays reachable.
+ */
+function renderCard(agentURI) {
+  const el = $("agentUri");
+  el.textContent = "";
+  if (!agentURI) { el.textContent = "(none)"; return; }
+
+  if (!agentURI.startsWith("data:")) {
+    const a = document.createElement("a");
+    a.href = agentURI;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = agentURI;
+    el.appendChild(a);
+    return;
+  }
+
+  let card = null;
+  try {
+    card = JSON.parse(decodeURIComponent(agentURI.slice(agentURI.indexOf(",") + 1)));
+  } catch { /* fall through to the raw URI */ }
+
+  const summary = document.createElement("summary");
+  summary.textContent = card
+    ? `${card.name ?? "agent card"}${card.version ? ` v${card.version}` : ""} — inline on chain (${agentURI.length} bytes)`
+    : `inline on chain (${agentURI.length} bytes)`;
+  summary.style.cursor = "pointer";
+
+  const pre = document.createElement("pre");
+  pre.textContent = card ? JSON.stringify(card, null, 2) : agentURI;
+  pre.style.cssText = "font-size:.72rem;color:var(--muted);background:#0e0c18;border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto;margin:10px 0 0;white-space:pre-wrap;word-break:break-word;max-height:260px";
+
+  const details = document.createElement("details");
+  details.append(summary, pre);
+  el.appendChild(details);
+}
+
 async function loadAgent(agentId, anchoredBy) {
   if (agentId === null || agentId === undefined) return;   // no agent registered yet
   const ref = parseCaip10(data.identityRegistry ?? CANONICAL_IDENTITY);
@@ -375,7 +415,7 @@ async function loadAgent(agentId, anchoredBy) {
     return;
   }
   $("agentOwner").textContent = owner;
-  $("agentUri").textContent = agentURI || "(none)";
+  renderCard(agentURI);
 
   const expected = caip10(monadTestnet.id, REGISTRY);
   const [raw, authorized] = await Promise.all([

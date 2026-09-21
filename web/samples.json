@@ -2,8 +2,8 @@
   "root": "0x9b361f4620dda3d51aa6c3806928e52a981970c0740594bde912d8e5f3e6e911",
   "configHash": "0x383dc8bffeae768ff95c2651041b60bdfc1fce0d9c77c49b240b4c4d6b869260",
   "decisionCount": 53384,
-  "agentId": null,
-  "identityRegistry": null,
+  "agentId": 2,
+  "identityRegistry": "eip155:10143:0xbd3de66963b81c8e44572e8bc28b31d512b9c260",
   "generatedAt": "2026-09-17T20:29:53.587Z",
   "samples": [
     {

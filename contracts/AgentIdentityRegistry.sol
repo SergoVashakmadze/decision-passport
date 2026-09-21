@@ -205,7 +205,9 @@ contract AgentIdentityRegistry {
             v := byte(0, calldataload(add(signature.offset, 64)))
         }
         // Reject the malleable upper half of the curve, so one authorisation has one signature.
-        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) return false;
+        // This is secp256k1n / 2, and it must be the full 32 bytes: a constant even slightly short
+        // compares against a far smaller number and rejects essentially every valid signature.
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) return false;
         if (v != 27 && v != 28) return false;
         address recovered = ecrecover(digest, v, r, s);
         return recovered != address(0) && recovered == signer;

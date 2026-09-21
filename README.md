@@ -39,8 +39,10 @@ It deliberately proves nothing about whether those decisions were any good.
 | | |
 |---|---|
 | `DecisionRegistry` | [`0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121`](https://testnet.monadexplorer.com/address/0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121) |
+| `AgentIdentityRegistry` | [`0xbd3de66963b81c8e44572e8bc28b31d512b9c260`](https://testnet.monadexplorer.com/address/0xbd3de66963b81c8e44572e8bc28b31d512b9c260) |
+| Agent | `#2` — DipBuyer AI, card inlined on chain |
 | Chain | Monad Testnet (10143) |
-| Deploy gas | 534,375 |
+| Deploy gas | 534,375 / 1,755,978 |
 
 A real backtest run — **53,384 decisions from a 2016-2025 S&P 500 strategy** — anchored as a single
 transaction, then one decision proved against it:
@@ -88,11 +90,11 @@ binding is a statement about one key controlling both records — not something 
 on its own. Saying that plainly is the point; a passport that quietly implied one chain had checked
 the other would be the more impressive and less true thing to build.
 
-`scripts/agent-passport.mjs` assembles the whole chain of custody read-only, no wallet and no key,
-against both live chains:
+`scripts/agent-passport.mjs` assembles the whole chain of custody read-only, no wallet and no key:
 
 ```sh
 MONAD_REGISTRY_ADDRESS=0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121 \
+MONAD_IDENTITY_ADDRESS=0xbd3de66963b81c8e44572e8bc28b31d512b9c260 \
   node scripts/agent-passport.mjs 2
 ```
 
@@ -101,42 +103,58 @@ batch    0x9b361f4620dda3d51aa6c3806928e52a981970c0740594bde912d8e5f3e6e911
          53,384 decisions, anchored 2026-09-17T20:06:47.000Z
          by     0x9d76055e4A327A1950d7c3d89587FCCF47EfD10E
 
-agent    #2 in 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 on Monad
-         owner  0x8dF64bACf6b70F7787f8d14429b258B3fF958ec1
+agent    #2 in 0xbd3de66963b81c8e44572e8bc28b31d512b9c260 on Monad Testnet
+         owner  0x9d76055e4A327A1950d7c3d89587FCCF47EfD10E
+         card   data:application/json,… (DipBuyer AI v0.4.0, inline on chain)
 
 binding
-  agent names this registry   no  (it names none)
-  agent authorises anchorer   no
-  bound                       no
+  agent names this registry   yes
+  agent authorises anchorer   yes
+  bound                       yes
 
 decision QCOM · 2017-03-30 (buy)
+  proof is 16 hashes for a batch of 53,384
   in the batch, locally   yes
   in the batch, on chain  yes
 ```
 
-That is agent #2 — someone else's agent, picked off the live registry — and the binding correctly
-refuses. The decision still proves out, because inclusion and identity are separate questions and a
-failed identity binding does not un-anchor a batch. **No agent of ours is registered yet**: minting
-one is a mainnet write that spends real MON, so `scripts/link-agent.mjs` prints the transaction and
-stops unless passed `--confirm`.
+Drop `MONAD_IDENTITY_ADDRESS` and the same command reads the canonical mainnet registry instead,
+where the binding correctly refuses — nothing of ours is registered there.
+
+### The registry on testnet
+
+`contracts/AgentIdentityRegistry.sol` is an ERC-8004 registry deployed beside `DecisionRegistry`,
+because the canonical ones are mainnet-only and a passport split across two chains can only ever
+say "one key controls both records". It is conformant, not canonical: the interface, event
+signatures and metadata semantics are ERC-8004's, so `AgentIdentity` reads this contract and the
+mainnet one through the same ABI and moving to mainnet is a change of address. But anyone can
+deploy one of these, so an identity here is worth exactly what the deployment is trusted for. The
+mainnet registry is the one to register in for a claim that does not rest on trusting us.
+
+Two things it has to get right, because they *are* the binding:
+
+- **`agentWallet` is a reserved metadata key.** Writing it as ordinary metadata would let anyone
+  name any address as their agent's, and so claim that address's anchored batches. It is settable
+  only through `setAgentWallet`, which requires that address to have signed for it — EIP-712 for
+  EOAs, ERC-1271 for contract wallets.
+- **Acting as an agent is weaker than owning it.** A bound wallet is a hot key that signs an anchor
+  every rebalance. It may act as the agent; it may not repoint the decision registry, rebind the
+  wallet, or transfer the identity. Transferring an identity also clears its wallet, since that
+  wallet authorised the seller's agent and not the buyer's.
+
+There is no local EVM here, so the contract's tests run against a deployed copy — the same choice
+`merkle.test.ts` makes in asserting the TypeScript and Solidity encodings against each other rather
+than trusting they agree:
 
 ```sh
-MONAD_DEPLOYER_KEY_FILE=./agent.key node scripts/link-agent.mjs \
-  register https://dipbuyer.ai/agent-card.json --link 10143 0x9444… --confirm
+MONAD_DEPLOYER_KEY_FILE=./deployer.key MONAD_IDENTITY_ADDRESS=0x… \
+  node scripts/exercise-identity.mjs      # 25 checks against the live chain
 ```
 
-`register --link` does both halves in one transaction, using the ERC-8004 registration overload
-that takes metadata entries: **311k gas against 356k** for registering and then linking, and atomic,
-so there is no window in which the agent exists but names no registry. The agent id is assigned by
-the contract, so it is read back from the mint log rather than guessed.
-
-The script refuses before spending anything if the sending key is not one the agent authorises, and
-warns before minting a second identity to an address that already owns one — an ERC-721 that cannot
-be unminted is a mistake to be talked out of, not one to report afterwards.
-
-**The key that registers must be the key that anchors.** The binding checks
-`isAuthorizedOrOwner(anchoredBy, agentId)`, so registering from a different address leaves that half
-reading `no` however correct everything else is.
+Every check is a property the binding depends on. One of them earned its keep immediately: the
+first deployment's signature-malleability guard used a constant four bytes short of `secp256k1n/2`,
+which compared against a number 2³² too small and rejected essentially every valid signature. No
+wallet could ever have been bound. It is not the kind of thing a reading of the code finds.
 
 ## The verify page
 
@@ -177,6 +195,8 @@ available in a system like this — so it is a test, not a comment.
 | `src/merkle.ts` | Tree construction, proof generation, verification |
 | `src/registry.ts` | `MonadAnchorer` (writes) and `MonadVerifier` (reads, no wallet needed) |
 | `src/identity.ts` | ERC-8004 agent identity reads, and the registry declaration |
+| `contracts/AgentIdentityRegistry.sol` | ERC-8004 identity registry, for the chain the batch is on |
+| `scripts/exercise-identity.mjs` | The identity registry's tests, run against a live deployment |
 | `src/passport.ts` | Composes both chains into one passport: decision → batch → anchorer → agent |
 | `contracts/DecisionRegistry.sol` | Anchors roots; verifies inclusion on chain |
 | `scripts/anchor-run.mjs` | Anchors a run and proves one of its decisions, end to end |
@@ -188,7 +208,7 @@ available in a system like this — so it is a test, not a comment.
 
 ```sh
 npm install
-npm test          # 43 tests
+npm test          # 43 tests (the contracts are exercised on chain, not here)
 npm run compile   # rebuilds src/artifacts from the contract
 ```
 
@@ -218,15 +238,17 @@ hardcoded RPC URLs.
 Merkle core, contract, anchorer, verifier and the verify page: written, tested, deployed, and
 exercised against a real run of 53,384 decisions on Monad testnet.
 
-ERC-8004 agent identity: reader, both halves of the binding, the passport and both scripts are
-written and tested, and run against the live mainnet registry — its interface was read off the
-deployed bytecode rather than the specification, because the deployed revision is older than the
-current reference implementation and three spec functions are simply not in it. What has *not*
-happened is registering an agent of ours: that is a mainnet write spending real MON, so it is a
-decision to take deliberately rather than something a build step does. The verify page's identity
-panel is written and tested against the live registry, and is driven by `agentId` in `samples.json`
-— it stays hidden while that is null, so it appears the moment an agent is registered rather than
-shipping a panel that answers "no" to every question.
+ERC-8004 agent identity: bound end to end on Monad testnet. Agent **#2** owns its identity in
+`AgentIdentityRegistry`, names `DecisionRegistry` as where its decisions live, and anchored the
+53,384-decision batch with the same key — so the passport resolves on one chain, and the verify
+page reads `bound: yes` from it. The agent card is inlined on chain as a `data:` URI rather than
+pointing at a URL, because a card that 404s is worse than no card.
+
+Not done: registering in the **canonical** mainnet registry, which spends real MON. The code
+defaults to it and its ABI was read off the deployed bytecode rather than the specification — the
+live revision is older than the current reference implementation, and `getAgentWallet`,
+`totalAgents` and `agentExists` are in the spec but absent from it, so calling them would revert.
+`scripts/link-agent.mjs` does that registration whenever there is MON to do it with.
 
 Next: x402-paid verification, and the ERC-8004 Reputation registry.
 
