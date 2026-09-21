@@ -208,7 +208,7 @@ available in a system like this — so it is a test, not a comment.
 | `scripts/agent-passport.mjs` | Reads the full chain of custody for one decision |
 | `scripts/link-agent.mjs` | Registers an ERC-8004 identity and points it at this registry |
 | `scripts/exercise-identity.mjs` | The identity registry's tests, run against a live deployment |
-| `web/agent-card.json` | The A2A agent card, inlined on chain at registration |
+| `web/agent-card.json` | The A2A agent card — inlined on chain, and served from the domain it names |
 
 ## Use
 
@@ -249,8 +249,19 @@ exercised against a real run of 53,384 decisions on Monad testnet.
 ERC-8004 agent identity: bound end to end on Monad testnet. Agent **#2** owns its identity in
 `AgentIdentityRegistry`, names `DecisionRegistry` as where its decisions live, and anchored the
 53,384-decision batch with the same key — so the passport resolves on one chain, and the verify
-page reads `bound: yes` from it. The agent card is inlined on chain as a `data:` URI rather than
-pointing at a URL, because a card that 404s is worse than no card.
+page reads `bound: yes` from it.
+
+The agent card is inlined on chain as a `data:` URI rather than pointing at a URL, because a card
+that 404s is worse than no card. The same card is also served from the domain it claims as its
+`url`, at the path [A2A](https://a2a-protocol.org) 0.3.0 specifies:
+
+```
+https://dipbuyer.ai/.well-known/agent-card.json
+```
+
+Byte-equivalent to the on-chain copy, and checked that way rather than assumed. If the two ever
+disagree, the chain is the one that counts — the copy on the domain is a convenience for
+discovery, and a domain can be lost or repointed in ways an anchored identity cannot.
 
 Not done: registering in the **canonical** mainnet registry, which spends real MON. The code
 defaults to it and its ABI was read off the deployed bytecode rather than the specification — the
