@@ -243,6 +243,11 @@ hardcoded RPC URLs.
 
 ## Status
 
+Current state, live addresses and the start-of-session checklist live in
+[`HANDOVER.md`](HANDOVER.md), which is verified against the chain rather than remembered. This
+section is the summary.
+
+
 Merkle core, contract, anchorer, verifier and the verify page: written, tested, deployed, and
 exercised against a real run of 53,384 decisions on Monad testnet.
 
