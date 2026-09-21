@@ -158,6 +158,22 @@
     </div>
   </section>
 
+  <section class="card" id="agentCard" hidden>
+    <h2>Whose decision was it?</h2>
+    <p class="sub">ERC-8004 agent identity, read live from Monad mainnet — a different chain from the batch.</p>
+    <dl class="kv">
+      <dt>Agent</dt><dd><a id="agentLink" target="_blank" rel="noopener"></a></dd>
+      <dt>Owner</dt><dd id="agentOwner">…</dd>
+      <dt>Agent card</dt><dd id="agentUri">…</dd>
+    </dl>
+    <dl class="kv" style="margin-top:18px">
+      <dt>Names this registry</dt><dd id="bindDeclared">…</dd>
+      <dt>Authorises anchorer</dt><dd id="bindAuth">…</dd>
+      <dt>Bound</dt><dd id="bindBound">…</dd>
+    </dl>
+    <p class="note" style="margin:16px 0 0" id="bindNote"></p>
+  </section>
+
   <section class="card">
     <h2>Why this is not just a hash on a chain</h2>
     <p class="sub" style="margin-bottom:12px">The usual design anchors a daily summary, which cannot prove anything about one decision.</p>
@@ -181,10 +197,17 @@
 </div>
 
 <script type="module">
-import { createPublicClient, http, keccak256, stringToBytes } from "https://esm.sh/viem@2.21.0";
+import { createPublicClient, http, hexToString, keccak256, stringToBytes } from "https://esm.sh/viem@2.21.0";
 
 const REGISTRY = "0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121";
 const EXPLORER = "https://testnet.monadexplorer.com";
+
+// ERC-8004 is deployed on Monad mainnet only — there is no code at this address on testnet — so
+// the identity panel reads a different chain from the batch panel. That split is the honest shape
+// of the thing, not an inconvenience to paper over.
+const IDENTITY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
+const MAINNET_EXPLORER = "https://monadexplorer.com";
+const DECISION_REGISTRY_KEY = "decisionRegistry";
 
 // Declared inline rather than imported from viem/chains: the CDN build is pinned for
 // reproducibility, and older pinned versions predate Monad's chain definitions.
@@ -196,6 +219,28 @@ const monadTestnet = {
   blockExplorers: { default: { name: "Monad Testnet explorer", url: EXPLORER } },
   testnet: true,
 };
+
+const monad = {
+  id: 143,
+  name: "Monad",
+  nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.monad.xyz"] } },
+  blockExplorers: { default: { name: "Monad explorer", url: MAINNET_EXPLORER } },
+};
+
+// Checked against the selectors in the deployed implementation, which is an earlier revision than
+// the current reference implementation: getAgentWallet, totalAgents and agentExists are in the
+// specification but absent from its bytecode, and calling them would revert.
+const IDENTITY_ABI = [
+  { type: "function", name: "ownerOf", stateMutability: "view",
+    inputs: [{ name: "agentId", type: "uint256" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "tokenURI", stateMutability: "view",
+    inputs: [{ name: "agentId", type: "uint256" }], outputs: [{ type: "string" }] },
+  { type: "function", name: "getMetadata", stateMutability: "view",
+    inputs: [{ name: "agentId", type: "uint256" }, { name: "key", type: "string" }], outputs: [{ type: "bytes" }] },
+  { type: "function", name: "isAuthorizedOrOwner", stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }, { name: "agentId", type: "uint256" }], outputs: [{ type: "bool" }] },
+];
 
 const ABI = [
   { type: "function", name: "isAnchored", stateMutability: "view",
@@ -210,6 +255,7 @@ const ABI = [
 ];
 
 const client = createPublicClient({ chain: monadTestnet, transport: http() });
+const identityClient = createPublicClient({ chain: monad, transport: http() });
 const $ = (id) => document.getElementById(id);
 
 /** Stable key order — must match the anchoring script exactly, or nothing verifies. */
@@ -273,9 +319,62 @@ async function loadBatch(root) {
     $("cfgOut").textContent = configHash;
     $("whenOut").textContent = new Date(Number(anchoredAt) * 1000).toUTCString();
     $("byOut").textContent = anchoredBy;
+    // Checked against the address the chain reports, not one this page carries.
+    loadAgent(data.agentId, anchoredBy);
   } catch (err) {
     $("whenOut").textContent = `could not reach the chain — ${err.shortMessage ?? err.message}`;
   }
+}
+
+/** A CAIP-10 account id, the standard way to name a contract on a specific chain. */
+const caip10 = (chainId, address) => `eip155:${chainId}:${address.toLowerCase()}`;
+
+const mark = (el, ok, text) => {
+  el.textContent = text ?? (ok ? "yes" : "no");
+  el.style.color = ok ? "var(--ok)" : "var(--bad)";
+};
+
+/**
+ * The identity half of the passport. Binding needs both directions: the agent's own record names
+ * this registry, and the batch was anchored by a key the agent authorises. Either alone is
+ * claimable by anyone, so both are shown and the verdict is their conjunction.
+ */
+async function loadAgent(agentId, anchoredBy) {
+  if (agentId === null || agentId === undefined) return;   // no agent registered yet
+  const id = BigInt(agentId);
+  $("agentCard").hidden = false;
+  $("agentLink").textContent = `#${id} in ${IDENTITY}`;
+  $("agentLink").href = `${MAINNET_EXPLORER}/address/${IDENTITY}`;
+
+  const read = (functionName, args) =>
+    identityClient.readContract({ address: IDENTITY, abi: IDENTITY_ABI, functionName, args });
+
+  let owner, agentURI;
+  try {
+    // ownerOf reverts for an unregistered id rather than returning the zero address.
+    [owner, agentURI] = await Promise.all([read("ownerOf", [id]), read("tokenURI", [id])]);
+  } catch {
+    $("agentOwner").textContent = "not registered";
+    $("bindNote").textContent = `No agent #${id} in the ERC-8004 registry on Monad mainnet.`;
+    return;
+  }
+  $("agentOwner").textContent = owner;
+  $("agentUri").textContent = agentURI || "(none)";
+
+  const expected = caip10(monadTestnet.id, REGISTRY);
+  const [raw, authorized] = await Promise.all([
+    read("getMetadata", [id, DECISION_REGISTRY_KEY]),
+    anchoredBy ? read("isAuthorizedOrOwner", [anchoredBy, id]) : Promise.resolve(false),
+  ]);
+  const declared = raw && raw !== "0x" ? hexToString(raw) : null;
+  const declaredOk = declared === expected;
+
+  mark($("bindDeclared"), declaredOk, declaredOk ? "yes" : declared ? `no — names ${declared}` : "no — names none");
+  mark($("bindAuth"), authorized);
+  mark($("bindBound"), declaredOk && authorized);
+  $("bindNote").textContent = declaredOk && authorized
+    ? "The agent names this registry, and this batch was anchored by a key it authorises. The decision below is this agent's."
+    : "The batch is anchored and its decisions are provable either way — inclusion and identity are separate questions, and a failed binding does not un-anchor anything.";
 }
 
 $("verifyBtn").addEventListener("click", async () => {

@@ -77,6 +77,10 @@ const out = {
   root: tree.root,
   configHash,
   decisionCount: unique.length,
+  // The ERC-8004 agent that made these decisions, once one is registered. Null means the verify
+  // page hides its identity panel rather than showing an unbound one; MONAD_AGENT_ID sets it, and
+  // regenerating samples must not silently drop it.
+  agentId: process.env.MONAD_AGENT_ID ? Number(process.env.MONAD_AGENT_ID) : null,
   generatedAt: new Date().toISOString(),
   samples,
 };

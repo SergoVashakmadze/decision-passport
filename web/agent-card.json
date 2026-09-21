@@ -1,0 +1,39 @@
+{
+  "protocolVersion": "0.3.0",
+  "name": "DipBuyer AI",
+  "description": "A value-investing agent whose verdicts come from deterministic, versioned rules rather than a language model. Every decision it makes is hashed into a Merkle batch and anchored on Monad, so any single verdict can be proved against the chain afterwards.",
+  "url": "https://dipbuyer.ai",
+  "version": "0.4.0",
+  "provider": {
+    "organization": "DipBuyer AI",
+    "url": "https://dipbuyer.ai"
+  },
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": ["application/json"],
+  "defaultOutputModes": ["application/json"],
+  "skills": [
+    {
+      "id": "screen-equity",
+      "name": "Screen an equity",
+      "description": "Applies the versioned rule set to one company and returns a verdict with the criteria that produced it.",
+      "tags": ["finance", "equity-research", "deterministic"]
+    },
+    {
+      "id": "prove-decision",
+      "name": "Prove a past decision",
+      "description": "Returns the Merkle inclusion proof for a decision, verifiable against the anchored root on Monad without trusting this agent.",
+      "tags": ["provenance", "merkle", "monad"]
+    }
+  ],
+  "trustModels": ["crypto-economic"],
+  "registrations": [
+    {
+      "agentId": null,
+      "agentRegistry": "eip155:143:0x8004a169fb4a3325136eb29fa0ceb6d2e539a432"
+    }
+  ],
+  "decisionRegistry": "eip155:10143:0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121"
+}
