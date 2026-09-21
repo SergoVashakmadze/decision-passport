@@ -97,6 +97,14 @@ check("owner is authorised", (await read("isAuthorizedOrOwner", [account.address
 check("a stranger is not", (await read("isAuthorizedOrOwner", [stranger.address, agentId])) === false);
 check("nobody is authorised for an agent that does not exist",
   (await read("isAuthorizedOrOwner", [account.address, agentId + 999_999n])) === false);
+// An agent with no bound wallet stores address(0) there, so a naive check matches the zero address
+// against it and authorises it for every agent. An unanchored batch reads back anchoredBy ==
+// address(0), which is how a caller arrives here without meaning to.
+const ZERO = "0x0000000000000000000000000000000000000000";
+check("the zero address is authorised for nothing",
+  (await read("isAuthorizedOrOwner", [ZERO, agentId])) === false);
+check("nor for an agent that does not exist",
+  (await read("isAuthorizedOrOwner", [ZERO, agentId + 999_999n])) === false);
 check("a stranger cannot set metadata",
   await reverts("setMetadata", [agentId, "decisionRegistry", stringToHex("eip155:1:0xdead")], stranger.address));
 check("a stranger cannot change the agentURI",

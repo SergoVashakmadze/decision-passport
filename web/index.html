@@ -390,7 +390,17 @@ async function loadAgent(agentId, anchoredBy) {
   if (agentId === null || agentId === undefined) return;   // no agent registered yet
   const ref = parseCaip10(data.identityRegistry ?? CANONICAL_IDENTITY);
   if (!ref) return;
+
+  // This page speaks to two chains and no others. Falling back to the mainnet client for an
+  // unrecognised chain id would read a different chain's state at the same address and present
+  // whatever came back as this agent — wrong answers are worse here than no answers.
   const onBatchChain = ref.chainId === monadTestnet.id;
+  if (!onBatchChain && ref.chainId !== monad.id) {
+    $("agentCard").hidden = false;
+    $("agentSub").textContent = `The identity is on chain ${ref.chainId}, which this page cannot read.`;
+    $("agentLink").textContent = `#${agentId} in ${ref.address}`;
+    return;
+  }
   const explorer = onBatchChain ? EXPLORER : MAINNET_EXPLORER;
 
   const id = BigInt(agentId);

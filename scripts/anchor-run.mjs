@@ -11,7 +11,7 @@
  */
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { createPublicClient, createWalletClient, http, keccak256, toHex, stringToBytes } from "viem";
+import { createPublicClient, createWalletClient, http, keccak256, stringToBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { monad, monadTestnet } from "viem/chains";
 import { buildMerkleTree, proofFor, verifyProof } from "../dist/merkle.js";

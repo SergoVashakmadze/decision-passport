@@ -73,8 +73,13 @@ const args = argv.filter((a, i) => a !== "--confirm" && a !== "--link" && !(link
 const [command] = args;
 
 const usage = () => {
-  console.error("usage: node scripts/link-agent.mjs register <agent-card-url> [--link <chainId> <registryAddress>] [--confirm]");
+  console.error("usage: node scripts/link-agent.mjs register <agent-card-url|@card.json> [--link <chainId> <registryAddress>] [--confirm]");
   console.error("       node scripts/link-agent.mjs link <agentId> <chainId> <registryAddress> [--confirm]");
+  console.error("       node scripts/link-agent.mjs set-card <agentId> <card.json> [--confirm]");
+  console.error("");
+  console.error("  @card.json inlines that file as a data: URI instead of pointing at a URL.");
+  console.error("  MONAD_IDENTITY_ADDRESS + MONAD_NETWORK=testnet target a self-deployed registry;");
+  console.error("  the default is the canonical ERC-8004 registry on Monad mainnet.");
   process.exit(1);
 };
 

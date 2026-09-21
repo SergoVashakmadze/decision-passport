@@ -39,10 +39,10 @@ It deliberately proves nothing about whether those decisions were any good.
 | | |
 |---|---|
 | `DecisionRegistry` | [`0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121`](https://testnet.monadexplorer.com/address/0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121) |
-| `AgentIdentityRegistry` | [`0xbd3de66963b81c8e44572e8bc28b31d512b9c260`](https://testnet.monadexplorer.com/address/0xbd3de66963b81c8e44572e8bc28b31d512b9c260) |
+| `AgentIdentityRegistry` | [`0x6ce06a82cdf76367a3a112893c724fe5a738c6bf`](https://testnet.monadexplorer.com/address/0x6ce06a82cdf76367a3a112893c724fe5a738c6bf) |
 | Agent | `#2` — DipBuyer AI, card inlined on chain |
 | Chain | Monad Testnet (10143) |
-| Deploy gas | 534,375 / 1,755,978 |
+| Deploy gas | 534,375 / 1,767,528 |
 
 A real backtest run — **53,384 decisions from a 2016-2025 S&P 500 strategy** — anchored as a single
 transaction, then one decision proved against it:
@@ -94,7 +94,7 @@ the other would be the more impressive and less true thing to build.
 
 ```sh
 MONAD_REGISTRY_ADDRESS=0x9444ad8eaa2b17fc725827ab4cc8a73725dd7121 \
-MONAD_IDENTITY_ADDRESS=0xbd3de66963b81c8e44572e8bc28b31d512b9c260 \
+MONAD_IDENTITY_ADDRESS=0x6ce06a82cdf76367a3a112893c724fe5a738c6bf \
   node scripts/agent-passport.mjs 2
 ```
 
@@ -103,7 +103,7 @@ batch    0x9b361f4620dda3d51aa6c3806928e52a981970c0740594bde912d8e5f3e6e911
          53,384 decisions, anchored 2026-09-17T20:06:47.000Z
          by     0x9d76055e4A327A1950d7c3d89587FCCF47EfD10E
 
-agent    #2 in 0xbd3de66963b81c8e44572e8bc28b31d512b9c260 on Monad Testnet
+agent    #2 in 0x6ce06a82cdf76367a3a112893c724fe5a738c6bf on Monad Testnet
          owner  0x9d76055e4A327A1950d7c3d89587FCCF47EfD10E
          card   data:application/json,… (DipBuyer AI v0.4.0, inline on chain)
 
@@ -148,7 +148,7 @@ than trusting they agree:
 
 ```sh
 MONAD_DEPLOYER_KEY_FILE=./deployer.key MONAD_IDENTITY_ADDRESS=0x… \
-  node scripts/exercise-identity.mjs      # 25 checks against the live chain
+  node scripts/exercise-identity.mjs      # 27 checks against the live chain
 ```
 
 Every check is a property the binding depends on. One of them earned its keep immediately: the
@@ -166,8 +166,14 @@ first click verifies something real.
 The button next to it flips the verdict on the record. The hash changes, the chain rejects it, and
 the page says why. That is the whole argument in one interaction.
 
+Below it, the identity panel reads the agent from `identityRegistry` in `samples.json` and shows
+both halves of the binding. It stays hidden while `agentId` is null, so it appears when there is an
+agent to show rather than answering "no" to every question.
+
 ```sh
-npm run build && node scripts/export-samples.mjs <run-dump.json> web/samples.json
+npm run build
+MONAD_AGENT_ID=2 MONAD_IDENTITY_ADDRESS=0x6ce06a82cdf76367a3a112893c724fe5a738c6bf \
+  node scripts/export-samples.mjs <run-dump.json> web/samples.json
 npx http-server web        # or any static server; it must be served over HTTP, not file://
 ```
 
@@ -195,21 +201,21 @@ available in a system like this — so it is a test, not a comment.
 | `src/merkle.ts` | Tree construction, proof generation, verification |
 | `src/registry.ts` | `MonadAnchorer` (writes) and `MonadVerifier` (reads, no wallet needed) |
 | `src/identity.ts` | ERC-8004 agent identity reads, and the registry declaration |
-| `contracts/AgentIdentityRegistry.sol` | ERC-8004 identity registry, for the chain the batch is on |
-| `scripts/exercise-identity.mjs` | The identity registry's tests, run against a live deployment |
-| `src/passport.ts` | Composes both chains into one passport: decision → batch → anchorer → agent |
+| `src/passport.ts` | Composes the chain of custody: decision → batch → anchorer → agent |
 | `contracts/DecisionRegistry.sol` | Anchors roots; verifies inclusion on chain |
+| `contracts/AgentIdentityRegistry.sol` | ERC-8004 identity registry, for the chain the batch is on |
 | `scripts/anchor-run.mjs` | Anchors a run and proves one of its decisions, end to end |
 | `scripts/agent-passport.mjs` | Reads the full chain of custody for one decision |
 | `scripts/link-agent.mjs` | Registers an ERC-8004 identity and points it at this registry |
-| `web/agent-card.json` | The A2A agent card to publish and register against |
+| `scripts/exercise-identity.mjs` | The identity registry's tests, run against a live deployment |
+| `web/agent-card.json` | The A2A agent card, inlined on chain at registration |
 
 ## Use
 
 ```sh
 npm install
 npm test          # 43 tests (the contracts are exercised on chain, not here)
-npm run compile   # rebuilds src/artifacts from the contract
+npm run compile   # rebuilds src/artifacts from contracts/
 ```
 
 The compiled ABI and bytecode are committed, so consuming this package needs no Solidity toolchain —
@@ -227,7 +233,9 @@ Deploying needs a funded key, read from a **file** rather than an argument or an
 it cannot land in shell history or a process listing. It is never printed.
 
 ```sh
-MONAD_DEPLOYER_KEY_FILE=./deployer.key npm run deploy   # MONAD_NETWORK=mainnet for chain 143
+MONAD_DEPLOYER_KEY_FILE=./deployer.key npm run deploy                          # DecisionRegistry
+MONAD_DEPLOYER_KEY_FILE=./deployer.key npm run deploy -- AgentIdentityRegistry
+#   MONAD_NETWORK=mainnet for chain 143
 ```
 
 Chain definitions come from `viem/chains` (`monadTestnet` = 10143, `monad` = 143) rather than

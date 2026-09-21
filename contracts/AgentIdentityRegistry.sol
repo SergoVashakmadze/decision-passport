@@ -228,7 +228,14 @@ contract AgentIdentityRegistry {
      *      whole thing this contract exists to make hard.
      */
     function isAuthorizedOrOwner(address account, uint256 agentId) public view returns (bool) {
-        return _isApprovedOrOwner(account, agentId) || _agentWallets[agentId] == account;
+        // The zero address is authorised for nothing. Without this, an agent with no bound wallet
+        // has _agentWallets[agentId] == address(0), so asking about the zero address matches it and
+        // returns true — for every agent, registered or not. Callers reach that by accident rather
+        // than by attack: an unanchored batch reads back anchoredBy == address(0), and the binding
+        // check would then answer "yes, that agent authorised it" about a batch that does not exist.
+        if (account == address(0)) return false;
+        return _isApprovedOrOwner(account, agentId)
+            || (_owners[agentId] != address(0) && _agentWallets[agentId] == account);
     }
 
     /// @dev Control of the identity itself: owner, approved address, or operator. Never a wallet.
